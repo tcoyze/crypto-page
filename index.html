@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8">
+    <title>Cryptos</title>
+    <meta name="description" content="A free, lightweight, blazing-fast page to get crypto quotes using the GDAX API">
+
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+          "Oxygen", "Ubuntu", "Helvetica Neue", Arial, sans-serif;
+      }
+      table { font-family: Courier, monospace; }
+      .stocks-container {
+        margin-bottom: 1.5em;
+        width: 100%;
+        max-width: 600px;
+      }
+      a { text-decoration: none; }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 1.1em;
+      }
+      .stock-symbol {
+        width: 20%;
+        padding: 2px 4px 2px 0px;
+        color: blue;
+      }
+      .stock-price, .stock-change-pct {
+        width: 22%;
+        text-align: right;
+        padding: 2px 4px;
+      }
+      @media (max-width: 576px) {
+        table { margin-bottom: 3em; }
+        .stock-mkt-cap { display: none; }
+        .stock-symbol { width: 16%; }
+        .stock-price, .stock-change-pct { width: 28%; }
+        td.stock-symbol, td.stock-price, td.stock-change-pct {
+          padding-top: 1em;
+          padding-bottom: 1em;
+        }
+      }
+      .red {
+          color: red;
+      }
+      .night {
+          background-color: black;
+          color: white;
+      }
+
+      .day {
+          background-color: white;
+          color:black;
+      }
+      summary {
+          outline: none;
+      }
+      summary:hover { cursor: pointer; }
+      summary::-webkit-details-marker { display: none; }
+    </style>
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.0.13/css/all.css" integrity="sha384-DNOHZ68U8hZfKXOrtjWvjxusGo9WQnrNx2sqG0tfsghAvtVlRW3tvkXWZh58N9jp" crossorigin="anonymous">
+  </head>
+
+  <body class="day">
+    <div class="stocks-container"></div>
+
+    <p class="attribution">
+      Data provided for free by <a style="color: blue;" href="https://docs.gdax.com" target="_blank">GDAX</a>.
+    </p>
+
+    <p class="updated-timestamp"></p>
+
+    <div style="position: fixed; top: 7px; right: 16px;">
+        <a onclick="javascript:toggleMode();">
+            <i id="viewMode" class="far fa-moon"></i>
+        </a>
+    </div>
+
+    <div style="position: fixed; bottom: 7px; right: 16px;">
+        <a href="https://github.com/tcoyze/cryptowatcher" target="_blank" style="color: inherit;">
+            <i class="fab fa-github"></i>
+        </a>
+    </div>
+    <script>
+      'use strict';
+
+      const PORTFOLIOS = [
+        {'name': 'GDAX', 'symbols': ['BTC-USD', 'ETH-USD', 'ETH-BTC', 'BCH-USD', 'BCH-BTC', 'LTC-USD', 'LTC-BTC']},
+      ];
+
+      var nightMode = false;
+      let symbols = [];
+      let containerDiv = document.querySelector('.stocks-container');
+      let updatedDiv = document.querySelector('.updated-timestamp');
+      PORTFOLIOS.forEach((p, i) => addPortfolio(p, i === 0));
+      symbols = symbols.filter((s, i) => symbols.indexOf(s) === i);
+
+      function addPortfolio(portfolio, includeHeader) {
+        let tableHeaderHtml = '';
+        if (includeHeader) {
+          tableHeaderHtml = `
+            <thead>
+              <tr>
+                <th></th>
+                <th class="stock-price">Last</th>
+                <th class="stock-change-pct">Change%</th>
+              </tr>
+            </thead>
+          `
+        }
+        let tableBodyHtml = portfolio.symbols.map(symbol => {
+          symbols.push(symbol.toLowerCase());
+          var leg = symbol.split("-");
+          var link = `https://cryptowat.ch/markets/gdax/${leg[0]}/${leg[1]}`
+          let html = `
+            <tr data-symbol="${symbol}">
+              <td class="stock-symbol"><a style="color: inherit" href="${link}" target=_blank>${symbol}</a></td>
+              <td class="stock-price"></td>
+              <td class="stock-change-pct"></td>
+            </tr>
+          `
+          return html;
+        }).join('');
+        let portfolioDiv = document.createElement('div');
+        portfolioDiv.innerHTML = `
+        <details open>
+            <summary><h2>${portfolio.name}</h2></summary>
+            <span>
+                Exchange status: <i id="status" class="fas fa-circle red"></i>
+            </span>
+            <table>${tableHeaderHtml}<tbody>${tableBodyHtml}</tbody></table>
+        </details>
+        `;
+        containerDiv.appendChild(portfolioDiv);
+      }
+
+      var toggleMode = () => {
+          if(!window.nightMode){
+            document.body.setAttribute('class', 'night');
+
+            document.getElementById("viewMode").setAttribute('class', 'far fa-sun');
+
+            document.querySelectorAll(`.stock-symbol`).forEach(e => {
+                e.setAttribute('style', 'color: white');
+            });
+
+            window.nightMode = true;
+          }
+          else {
+            document.body.setAttribute('class', 'sun');
+
+            document.getElementById("viewMode").setAttribute('class', 'far fa-moon');
+            document.querySelectorAll(`.stock-symbol`).forEach(e => {
+                e.setAttribute('style', 'color: blue');
+            });
+            window.nightMode = false;
+          }
+      }
+
+      var formatQuote = value => {
+        let options = {
+          'maximumFractionDigits': 5,
+          'minimumFractionDigits': 2,
+          'minimumSignificantDigits': 5,
+          'style': 'currency',
+          'currency': 'USD'
+        };
+        return Number(value).toLocaleString('en', options);
+      }
+
+    var w = new WebSocket("wss://ws-feed.gdax.com");
+
+    var subscribe = () => {
+        var data = {
+            "type": "subscribe",
+            "product_ids": [
+                "BTC-USD",
+                "ETH-BTC",
+                "ETH-USD",
+                "BCH-BTC",
+                "BCH-USD",
+                "LTC-BTC",
+                "LTC-USD"
+            ],
+            "channels": [
+                "ticker",
+                "heartbeat"
+            ]
+        };
+
+        return JSON.stringify(data);
+    };
+
+    w.onopen = event => {
+        w.send(subscribe())
+    };
+
+    var handleHeartbeat = json => {
+        let product = json["product_id"]
+        document.getElementById(`status`).animate([{color: '#00ff7e'}, {color: 'yellow'}, {color: 'red'}], {duration: 1000 * 10});
+    };
+
+    var handleTicker = json => {
+        let price = Number(json.price);
+        let formattedPrice = formatQuote(price);
+        let product = json["product_id"];
+        let open = Number(json["open_24h"]);
+        let changePct = ((price - open) / open)
+        let rgbColor = changePct > 0 ? '0,255,0' : '255,0,0';
+        var rgbOpacity = Math.min(Math.abs(changePct) * 12, 1);
+
+        if(window.nightMode) {
+            rgbOpacity = Math.min(Math.max(.7, Math.abs(changePct) * 10), 1);
+        }
+
+        var style = `background-color: rgba(${rgbColor}, ${rgbOpacity})`;
+        if(window.nightMode) {
+            style = `color: rgba(${rgbColor}, ${rgbOpacity})`;
+        }
+
+        document.querySelectorAll(`[data-symbol="${product}"] .stock-price`).forEach(e => {
+            e.innerHTML = formattedPrice;
+            e.setAttribute('style', style);
+        });
+
+        document.querySelectorAll(`[data-symbol="${product}"] .stock-change-pct`).forEach(e => {
+            e.innerHTML = changePct.toLocaleString('en', {'style': 'percent', 'minimumFractionDigits': 2});
+            e.setAttribute('style', style);
+        });
+
+        document.querySelectorAll(`[data-symbol="${product}"]`).forEach(e => {
+            e.animate([{opacity: 1}, {opacity: 0.5}, {opacity: 1.0}], {duration: 1000});
+        });
+
+        updatedDiv.innerHTML = `Data updated at ${(new Date()).toLocaleString()}`;
+    };
+
+    w.onmessage = event => {
+        var json = JSON.parse(event.data);
+        let type = json.type;
+
+        if (type === "heartbeat") {
+            return handleHeartbeat(json);
+        }
+
+        if (type === "ticker") {
+            return handleTicker(json);
+        }
+    }
+    </script>
+  </body>
+</html>
